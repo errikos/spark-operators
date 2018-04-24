@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.Strategy
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{ Seconds, StreamingContext }
+import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -72,7 +72,7 @@ class SparkStreaming(sparkConf: SparkConf, args: Array[String]) {
 
     // Start the computation
     ssc.start()
-  
+
     // Wait for the computation to terminate
     ssc.awaitTermination()
   }

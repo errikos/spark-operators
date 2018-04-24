@@ -11,10 +11,10 @@ object Main {
 
     val reducers = 10
 
-    val inputFile= "/project2/lineorder_small.tbl"
+    val inputFile = "/project2/lineorder_small.tbl"
     val output = "output"
 
-    val sparkConf = new SparkConf().setAppName("CS422-Project2")//.setMaster("local[16]")
+    val sparkConf = new SparkConf().setAppName("CS422-Project2") //.setMaster("local[16]")
     val ctx = new SparkContext(sparkConf)
     val sqlContext = new org.apache.spark.sql.SQLContext(ctx)
 
@@ -33,7 +33,7 @@ object Main {
 
     val cb = new CubeOperator(reducers)
 
-    var groupingList = List("lo_suppkey","lo_shipmode","lo_orderdate")
+    var groupingList = List("lo_suppkey", "lo_shipmode", "lo_orderdate")
 
     val res = cb.cube(dataset, groupingList, "lo_supplycost", "SUM")
 
@@ -50,7 +50,6 @@ object Main {
     //    val q1 = df.cube("lo_suppkey","lo_shipmode","lo_orderdate")
     //      .agg(sum("lo_supplycost") as "sum supplycost")
     //    q1.show
-
 
   }
 }
