@@ -1,2 +1,11 @@
 *.class
 *.log
+
+# macOS
+**/.DS_Store
+
+# scala build dirs
+**/target
+
+# ensime
+**/*ensime*
