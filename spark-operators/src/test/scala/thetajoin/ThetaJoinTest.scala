@@ -7,13 +7,16 @@ import org.apache.spark.sql.expressions._
 import org.apache.spark.sql.functions._
 import java.io._
 
-class ThetaJoinTest extends FlatSpec {
-  val sparkConf =
-    new SparkConf().setAppName("CS422-Project2").setMaster("local[16]")
-  val ctx = new SparkContext(sparkConf)
-  val sqlContext = new org.apache.spark.sql.SQLContext(ctx)
+import org.apache.spark.sql.SparkSession
 
-  test
+class ThetaJoinTest extends FlatSpec {
+  private val ctx = SparkSession.builder
+    .master("local[16]")
+    .appName("CS422-Project2")
+    .getOrCreate()
+  private val sqlContext = ctx.sqlContext
+
+  test()
 
   def test() {
     val reducers = 10
@@ -60,7 +63,7 @@ class ThetaJoinTest extends FlatSpec {
     val resultSize = res.count
     val t2 = System.nanoTime
 
-    println((t2 - t1) / (Math.pow(10, 9)))
+    println((t2 - t1) / Math.pow(10, 9))
 
     val index1 = schema1.indexOf("num")
     val index2 = schema2.indexOf("num")

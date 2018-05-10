@@ -14,13 +14,17 @@ class CubeOperator(reducers: Int) {
    * The value is the aggregation result.
    * You are not allowed to change the definition of this function or the names of the aggregate functions.
    * */
+
+  /**
+    *
+    */
   def cube(dataset: Dataset,
            groupingAttributes: List[String],
            aggAttribute: String,
            agg: String): RDD[(String, Double)] = {
 
-    val rdd = dataset.getRDD()
-    val schema = dataset.getSchema()
+    val rdd = dataset.getRDD
+    val schema = dataset.getSchema
 
     val index = groupingAttributes.map(x => schema.indexOf(x))
     val indexAgg = schema.indexOf(aggAttribute)
@@ -30,6 +34,9 @@ class CubeOperator(reducers: Int) {
     null
   }
 
+  /**
+    *
+    */
   def cube_naive(dataset: Dataset,
                  groupingAttributes: List[String],
                  aggAttribute: String,
@@ -39,4 +46,8 @@ class CubeOperator(reducers: Int) {
     null
   }
 
+}
+
+object CubeOperator {
+  def apply(reducers: Int) = new CubeOperator(reducers)
 }

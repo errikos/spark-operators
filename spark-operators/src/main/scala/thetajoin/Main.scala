@@ -1,10 +1,6 @@
 package thetajoin
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.expressions._
-import org.apache.spark.sql.functions._
-import java.io._
+import org.apache.spark.sql.SparkSession
 
 object Main {
   def main(args: Array[String]) {
@@ -15,9 +11,11 @@ object Main {
 
     val output = "output"
 
-    val sparkConf = new SparkConf().setAppName("CS422-Project2") //.setMaster("local[16]")
-    val ctx = new SparkContext(sparkConf)
-    val sqlContext = new org.apache.spark.sql.SQLContext(ctx)
+    val ctx = SparkSession.builder
+      .master("local[16]")
+      .appName("CS422-Project2")
+      .getOrCreate()
+    val sqlContext = ctx.sqlContext
 
     val df1 = sqlContext.read
       .format("com.databricks.spark.csv")
@@ -42,7 +40,7 @@ object Main {
     val dataset1 = new Dataset(rdd1, schema1)
     val dataset2 = new Dataset(rdd2, schema2)
 
-    val tj = new ThetaJoin(dataset1.getRDD().count,
+    val tj = new ThetaJoin(dataset1.getRDD.count,
                            dataset2.getRDD.count,
                            reducers,
                            maxInput)

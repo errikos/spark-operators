@@ -1,50 +1,52 @@
 package cubeoperator
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.expressions._
-import org.apache.spark.sql.functions._
-import java.io._
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SparkSession
 
-object Main {
-  def main(args: Array[String]) {
 
-    val reducers = 10
+object CubeRunner {
 
-    val inputFile = "/project2/lineorder_small.tbl"
-    val output = "output"
+  val numReducers = 10
 
-    val sparkConf = new SparkConf().setAppName("CS422-Project2") //.setMaster("local[16]")
-    val ctx = new SparkContext(sparkConf)
-    val sqlContext = new org.apache.spark.sql.SQLContext(ctx)
+  def apply(inputPath: String): RDD[(String, Double)] = {
+    // setup Spark session and context
+    val ctx = SparkSession.builder
+      .master("local[16]")
+      .appName("CS422-Project2")
+      .getOrCreate()
+    val sqlContext = ctx.sqlContext
 
+    // load input file into a DataFrame
     val df = sqlContext.read
       .format("com.databricks.spark.csv")
       .option("header", "true")
       .option("inferSchema", "true")
       .option("delimiter", "|")
-      .load(inputFile)
+      .load(inputPath)
 
-    val rdd = df.rdd
+    // create Dataset
+    val dataset = Dataset(df.rdd, df.schema map { _.name } toList)
 
-    val schema = df.schema.toList.map(x => x.name)
-
-    val dataset = new Dataset(rdd, schema)
-
-    val cb = new CubeOperator(reducers)
-
+    // create Cube operator and run
+    val cb = CubeOperator(numReducers)
     var groupingList = List("lo_suppkey", "lo_shipmode", "lo_orderdate")
+    cb.cube(dataset, groupingList, "lo_supplycost", "SUM")
 
-    val res = cb.cube(dataset, groupingList, "lo_supplycost", "SUM")
+    /**
+      * The above call corresponds to the query:
+      * SELECT lo_suppkey, lo_shipmode, lo_orderdate, SUM (lo_supplycost)
+      * FROM LINEORDER
+      * CUBE BY lo_suppkey, lo_shipmode, lo_orderdate
+      */
+  }
+}
 
-    /*
-       The above call corresponds to the query:
-       SELECT lo_suppkey, lo_shipmode, lo_orderdate, SUM (lo_supplycost)
-       FROM LINEORDER
-       CUBE BY lo_suppkey, lo_shipmode, lo_orderdate
-     */
+object Main {
+  def main(args: Array[String]) {
 
-    //res.saveAsTextFile(output)
+    val res = CubeRunner("./data/lineorder_small.tbl")
+
+    // res.saveAsTextFile(outputPath)
 
     //Perform the same query using SparkSQL
     //    val q1 = df.cube("lo_suppkey","lo_shipmode","lo_orderdate")
