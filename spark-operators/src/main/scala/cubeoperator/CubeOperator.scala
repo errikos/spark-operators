@@ -4,17 +4,18 @@ import org.apache.spark.rdd.RDD
 
 class CubeOperator(reducers: Int) {
 
-  /*
-   * This method gets as input one dataset, the grouping attributes of the cube (CUBE BY clause)
-   * the attribute on which the aggregation is performed
-   * and the aggregate function (it has to be one of "COUNT", "SUM", "MIN", "MAX", "AVG")
-   * and returns an RDD with the result in the form of <key = string, value = double> pairs.
-   * The key is used to uniquely identify a group that corresponds to a certain combination of attribute values.
-   * You are free to do that following your own naming convention.
-   * The value is the aggregation result.
-   * You are not allowed to change the definition of this function or the names of the aggregate functions.
-   * */
-
+  /**
+    * This method gets as input one dataset, the grouping attributes of the cube (CUBE BY clause)
+    * the attribute on which the aggregation is performed
+    * and the aggregate function (it has to be one of "COUNT", "SUM", "MIN", "MAX", "AVG")
+    * and returns an RDD with the result in the form of < key: string, value: double > pairs.
+    * The key is used to uniquely identify a group that corresponds to a certain combination of
+    * attribute values.
+    * You are free to do that following your own naming convention.
+    * The value is the aggregation result.
+    * You are not allowed to change the definition of this function or the names of the aggregate
+    * functions.
+    */
   /**
     *
     */
@@ -26,9 +27,12 @@ class CubeOperator(reducers: Int) {
     val rdd = dataset.getRDD
     val schema = dataset.getSchema
 
-    val index = groupingAttributes.map(x => schema.indexOf(x))
+    val indexAtt = groupingAttributes.map { schema.indexOf(_) }
     val indexAgg = schema.indexOf(aggAttribute)
 
+    // get the appropriate aggregator object providing the map/combine/reduce functions
+    val aggregator = Aggregator(agg, indexAtt, indexAgg)
+    rdd.map{ aggregator.mapper }.reduceByKey{ aggregator.reducer }
     //TODO Task 1
 
     null
