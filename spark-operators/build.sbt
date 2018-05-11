@@ -9,8 +9,7 @@ version := "0.1.0"
 scalaVersion := "2.11.7"
 scalacOptions := Seq("-unchecked",
                      "-deprecation",
-                     "-feature",
-                     "-language:postfixOps")
+                     "-feature")
 
 jarName in assembly := "cs422_p2.jar"
 
