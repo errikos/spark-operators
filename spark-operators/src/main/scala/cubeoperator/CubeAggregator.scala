@@ -3,10 +3,20 @@ package cubeoperator
 import org.apache.spark.sql.Row
 import scala.reflect.ClassTag
 
+/**
+  * Cube aggregator base abstract class.
+  *
+  * The various cube operators are defined as subclasses of this class.
+  * Key and Value types are parameterised, with Key being preset to Row.
+  * Any subclass:
+  *   - must define the Value type, as well as the valueClassTag value;
+  *   - can redefine the Key type, in which case it also has to redefine the keyClassTag value.
+  */
 sealed abstract class CubeAggregator(val name: String) extends Product with Serializable {
   type Key = Row
   type Value
 
+  // these implicit values are needed by spark reduceByKey, so that it can know the Key/Value types
   implicit val keyClassTag: ClassTag[Key] = ClassTag(classOf[Key])
   implicit val valueClassTag: ClassTag[Value]
 

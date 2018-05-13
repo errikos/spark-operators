@@ -16,6 +16,7 @@ class CubeOperator(reducers: Int) {
     * You are not allowed to change the definition of this function or the names of the aggregate
     * functions.
     */
+
   /**
     *
     */
@@ -35,6 +36,7 @@ class CubeOperator(reducers: Int) {
 
     // import implicit ClassTags for Key and Value
     // required by the PairRDDFunctions constructor
+    import aggregator._
 
     // execute phase 1
     val bottomCell = rdd
