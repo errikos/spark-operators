@@ -1,6 +1,6 @@
 package cubeoperator
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd._
 
 class CubeOperator(reducers: Int) {
 
@@ -30,12 +30,20 @@ class CubeOperator(reducers: Int) {
     val indexAtt = groupingAttributes.map { schema.indexOf(_) }
     val indexAgg = schema.indexOf(aggAttribute)
 
-    // get the appropriate aggregator object providing the map/combine/reduce functions
-    val aggregator = Aggregator(agg, indexAtt, indexAgg)
-    rdd.map{ aggregator.mapper }.reduceByKey{ aggregator.reducer }
-    //TODO Task 1
+    // get the appropriate aggregator object providing the map/reduce functions
+    val aggregator = CubeAggregator(agg, indexAtt, indexAgg)
 
-    null
+    // import implicit ClassTags for Key and Value
+    // required by the PairRDDFunctions constructor
+
+    // execute phase 1
+    val bottomCell = rdd
+      .map(aggregator.mapper)
+      .reduceByKey(aggregator.reducer)
+
+    // execute phase 2
+
+    ???
   }
 
   /**
@@ -46,8 +54,8 @@ class CubeOperator(reducers: Int) {
                  aggAttribute: String,
                  agg: String): RDD[(String, Double)] = {
 
-    //TODO naive algorithm for cube computation
-    null
+    // TODO naive algorithm for cube computation
+    ???
   }
 
 }
