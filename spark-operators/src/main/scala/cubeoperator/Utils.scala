@@ -9,7 +9,7 @@ object Utils {
     // head of mask is initially false, so that hasNext succeeds;
     // in the first iteration, it becomes true and stays that way;
     // at the same time, every other bit becomes false and gives the first result
-    private var mask = false +: Seq.fill(length + 1)(true)
+    private var mask = false +: Seq.fill(length)(true)
 
     override def iterator: Iterator[Seq[Boolean]] = new Iterator[Seq[Boolean]] {
       override def hasNext: Boolean = mask.contains(false)
