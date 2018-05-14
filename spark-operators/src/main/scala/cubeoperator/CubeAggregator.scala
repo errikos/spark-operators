@@ -28,14 +28,14 @@ sealed abstract class CubeAggregator(val name: String) extends Product with Seri
   def mapper(row: Row): (Key, Value)
   def reducer(v1: Value, v2: Value): Value
   // generates the partial upper cells (end of phase 1)
-  final def partialGenerator(row: (Key, Value)): TraversableOnce[(Key, Value)] = {
+  final def partialGenerator(row: (Key, Value)): TraversableOnce[(String, Value)] = {
     val attrs = row._1
     for (mask <- MaskGenerator(attrs.length))
-      yield (Row(attrs.toSeq.zip(mask).map { case (a, b) => if (b) a else '*' }), row._2)
+      yield (attrs.toSeq.zip(mask).map { case (a, b) => if (b) a else '*' }.mkString(";"), row._2)
   }
   // the last step that an operator has to do;
-  // necessary for AVG-like operators
-  def epilogueMapper(kv: (Key, Value)): (String, Double)
+  // necessary for AVG-like operators as well as to convert to Double
+  def epilogueMapper(v: Value): Double
 
   /**
     * Returns a new Row containing the attributes from 'row' that
@@ -72,10 +72,8 @@ case class Count(private val keyIdx: Seq[Int]) extends CubeAggregator("COUNT") {
   override implicit val valueClassTag: ClassTag[Value] = ClassTag(classOf[Value])
 
   override def mapper(row: Key): (Key, Double) = (selectAttrs(row, keyIdx), 1)
-  override def reducer(v1: Double, v2: Double): Double = v1 + v2
-  override def epilogueMapper(kv: (Key, Double)): (String, Double) = kv match {
-    case (key, value) => (key.mkString(";"), value)
-  }
+  override def reducer(v1: Value, v2: Value): Double = v1 + v2
+  override def epilogueMapper(v: Value): Double = v
 }
 
 // Sum operator; sums a specific row attribute (may not be in key).
@@ -86,9 +84,7 @@ case class Sum(private val keyIdx: Seq[Int], private val valIdx: Int)
 
   override def mapper(row: Key): (Key, Value) = (selectAttrs(row, keyIdx), row.getInt(valIdx))
   override def reducer(v1: Value, v2: Value): Value = v1 + v2
-  override def epilogueMapper(kv: (Key, Value)): (String, Double) = kv match {
-    case (key, value) => (key.mkString(";"), value)
-  }
+  override def epilogueMapper(v: Value): Double = v
 }
 
 // Min operator; finds the minimum value of an attribute (may not be in key).
@@ -99,9 +95,7 @@ case class Min(private val keyIdx: Seq[Int], private val valIdx: Int)
 
   override def mapper(row: Key): (Key, Value) = (selectAttrs(row, keyIdx), row.getInt(valIdx))
   override def reducer(v1: Value, v2: Value): Value = math.min(v1, v2)
-  override def epilogueMapper(kv: (Key, Value)): (String, Double) = kv match {
-    case (key, value) => (key.mkString(";"), value)
-  }
+  override def epilogueMapper(v: Value): Double = v
 }
 
 // Max operator; finds the maximum value of an attribute (may not be in key).
@@ -112,9 +106,7 @@ case class Max(private val keyIdx: Seq[Int], private val valIdx: Int)
 
   override def mapper(row: Key): (Key, Value) = (selectAttrs(row, keyIdx), row.getInt(valIdx))
   override def reducer(v1: Value, v2: Value): Value = math.max(v1, v2)
-  override def epilogueMapper(kv: (Key, Value)): (String, Double) = kv match {
-    case (key, value) => (key.mkString(";"), value)
-  }
+  override def epilogueMapper(v: Value): Double = v
 }
 
 // Avg operator; finds the average value of an attribute (may not be in key).
@@ -125,7 +117,5 @@ case class Avg(private val keyIdx: Seq[Int], private val valIdx: Int)
 
   override def mapper(row: Key): (Key, Value) = (selectAttrs(row, keyIdx), (row.getInt(valIdx), 1))
   override def reducer(v1: Value, v2: Value): Value = (v1._1 + v2._1, v1._2 + v2._2)
-  override def epilogueMapper(kv: (Key, Value)): (String, Double) = kv match {
-    case (key, (sum, count)) => (key.mkString(";"), sum / count)
-  }
+  override def epilogueMapper(v: Value): Double = v._1 / v._2
 }

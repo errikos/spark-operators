@@ -46,11 +46,10 @@ class CubeOperator(reducers: Int) {
 
     // execute phase 2
     val phaseTwoResult = phaseOneResult
-        .map(identity)                    // map just returns the <key, value> pair
         .reduceByKey(aggregator.reducer)  // reducer is the same as in the first phase
 
     // apply epilogue mapper and return result
-    phaseTwoResult.map(aggregator.epilogueMapper)
+    phaseTwoResult.mapValues(aggregator.epilogueMapper)
   }
 
   /**

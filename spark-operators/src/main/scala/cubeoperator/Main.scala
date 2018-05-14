@@ -1,26 +1,28 @@
 package cubeoperator
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SparkSession
 
-object CubeRunner {
+object Main {
 
-  val numReducers = 10
+  val numReducers: Int = 10
+  val inputPath: String = "./data/lineorder_small.tbl"
+  val outputPath: String = s"$inputPath.out"
 
-  def apply(inputPath: String): RDD[(String, Double)] = {
+  def main(args: Array[String]) {
     // setup Spark context
     val ctx = SparkSession.builder
-      .master("local[16]")
-      .appName("CS422-Project2")
-      .getOrCreate()
+        .master("local[16]")
+        .appName("CS422-Project2")
+        .getOrCreate()
 
     // load input file into a DataFrame
     val df = ctx.sqlContext.read
-      .format("com.databricks.spark.csv")
-      .option("header", "true")
-      .option("inferSchema", "true")
-      .option("delimiter", "|")
-      .load(inputPath)
+        .format("com.databricks.spark.csv")
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .option("delimiter", "|")
+        .load(inputPath)
 
     // create Dataset
     val dataset = Dataset(df.rdd, df.schema.map { _.name }.toList)
@@ -28,29 +30,21 @@ object CubeRunner {
     // create Cube operator and run
     val cb = CubeOperator(numReducers)
     val groupingList = List("lo_suppkey", "lo_shipmode", "lo_orderdate")
-    cb.cube(dataset, groupingList, "lo_supplycost", "SUM")
+
+    val res = cb.cube(dataset, groupingList, "lo_supplycost", "SUM")
+    res.saveAsTextFile(outputPath)
 
     /**
-    * The above call corresponds to the query:
-    *
-    * SELECT lo_suppkey, lo_shipmode, lo_orderdate, SUM (lo_supplycost)
-    * FROM LINEORDER
-    * CUBE BY lo_suppkey, lo_shipmode, lo_orderdate
-    */
-  }
-}
-
-object Main {
-  def main(args: Array[String]) {
-
-    val res = CubeRunner("./data/lineorder_small.tbl")
-
-    // res.saveAsTextFile(outputPath)
+      * The above call corresponds to the query:
+      *
+      * SELECT lo_suppkey, lo_shipmode, lo_orderdate, SUM (lo_supplycost)
+      * FROM LINEORDER
+      * CUBE BY lo_suppkey, lo_shipmode, lo_orderdate
+      */
 
     //Perform the same query using SparkSQL
-    //    val q1 = df.cube("lo_suppkey","lo_shipmode","lo_orderdate")
-    //      .agg(sum("lo_supplycost") as "sum supplycost")
-    //    q1.show
-
+    val q1 = df.cube("lo_suppkey","lo_shipmode","lo_orderdate")
+      .agg(sum("lo_supplycost") as "sum supplycost")
+    q1.show(100)
   }
 }
