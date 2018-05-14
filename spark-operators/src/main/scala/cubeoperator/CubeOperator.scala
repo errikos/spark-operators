@@ -20,13 +20,13 @@ class CubeOperator(reducers: Int) {
   /**
     * MRDataCube operator.
     */
-  def cube(dataset: Dataset,
+  def cube(dataSet: Dataset,
            groupingAttributes: List[String],
            aggAttribute: String,
            agg: String): RDD[(String, Double)] = {
 
-    val rdd = dataset.getRDD
-    val schema = dataset.getSchema
+    val rdd = dataSet.getRDD
+    val schema = dataSet.getSchema
 
     val indexAtt = groupingAttributes.map { schema.indexOf(_) }
     val indexAgg = schema.indexOf(aggAttribute)
@@ -44,7 +44,7 @@ class CubeOperator(reducers: Int) {
       .reduceByKey(aggregator.reducer)       // combine locally, shuffle and reduce
       .flatMap(aggregator.partialGenerator)  // generate partial upper cells
 
-    // execute phase 2
+    // execute phase 2 and return
 
     ???
   }
