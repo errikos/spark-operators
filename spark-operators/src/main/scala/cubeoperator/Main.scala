@@ -45,6 +45,6 @@ object Main {
     val q1 = df
       .cube("lo_suppkey", "lo_shipmode", "lo_orderdate")
       .agg(sum("lo_supplycost") as "sum supplycost")
-    q1.show(100)
+    q1.show(20)
   }
 }

@@ -54,13 +54,28 @@ class CubeOperator(reducers: Int) {
   /**
     * Naive cube operator.
     */
-  def cube_naive(dataset: Dataset,
+  def cube_naive(dataSet: Dataset,
                  groupingAttributes: List[String],
                  aggAttribute: String,
                  agg: String): RDD[(String, Double)] = {
 
-    // TODO naive algorithm for cube computation
-    ???
+    val rdd = dataSet.getRDD
+    val schema = dataSet.getSchema
+
+    val indexAtt = groupingAttributes.map { schema.indexOf(_) }
+    val indexAgg = schema.indexOf(aggAttribute)
+
+    // get the appropriate naive aggregator object providing the map/reduce functions
+    val aggregator = NaiveCubeAggregator(agg, indexAtt, indexAgg)
+
+    // import implicit ClassTags for Key and Value
+    // required by the PairRDDFunctions constructor, called by reduceByKey
+    import aggregator._
+
+    rdd
+      .flatMap(aggregator.mapper)
+      .reduceByKey(aggregator.reducer)
+      .mapValues(aggregator.epilogueMapper)
   }
 
 }
