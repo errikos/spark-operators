@@ -31,7 +31,12 @@ sealed abstract class CubeAggregator(val name: String) extends Product with Seri
   final def partialGenerator(row: (Key, Value)): TraversableOnce[(String, Value)] = {
     val attrs = row._1
     for (mask <- MaskGenerator(attrs.length))
-      yield (attrs.toSeq.zip(mask).map { case (a, b) => if (b) a else '*' }.mkString(";"), row._2)
+      yield
+        (attrs.toSeq
+           .zip(mask)
+           .map { case (a, b) => if (b) a else '*' }
+           .mkString(";"),
+         row._2)
   }
   // the last step that an operator has to do;
   // necessary for AVG-like operators as well as to convert to Double
@@ -82,7 +87,8 @@ case class Sum(private val keyIdx: Seq[Int], private val valIdx: Int)
   override type Value = Double
   override implicit val valueClassTag: ClassTag[Value] = ClassTag(classOf[Value])
 
-  override def mapper(row: Key): (Key, Value) = (selectAttrs(row, keyIdx), row.getInt(valIdx))
+  override def mapper(row: Key): (Key, Value) =
+    (selectAttrs(row, keyIdx), row.getInt(valIdx))
   override def reducer(v1: Value, v2: Value): Value = v1 + v2
   override def epilogueMapper(v: Value): Double = v
 }
@@ -93,7 +99,8 @@ case class Min(private val keyIdx: Seq[Int], private val valIdx: Int)
   override type Value = Double
   override implicit val valueClassTag: ClassTag[Value] = ClassTag(classOf[Value])
 
-  override def mapper(row: Key): (Key, Value) = (selectAttrs(row, keyIdx), row.getInt(valIdx))
+  override def mapper(row: Key): (Key, Value) =
+    (selectAttrs(row, keyIdx), row.getInt(valIdx))
   override def reducer(v1: Value, v2: Value): Value = math.min(v1, v2)
   override def epilogueMapper(v: Value): Double = v
 }
@@ -104,7 +111,8 @@ case class Max(private val keyIdx: Seq[Int], private val valIdx: Int)
   override type Value = Double
   override implicit val valueClassTag: ClassTag[Value] = ClassTag(classOf[Value])
 
-  override def mapper(row: Key): (Key, Value) = (selectAttrs(row, keyIdx), row.getInt(valIdx))
+  override def mapper(row: Key): (Key, Value) =
+    (selectAttrs(row, keyIdx), row.getInt(valIdx))
   override def reducer(v1: Value, v2: Value): Value = math.max(v1, v2)
   override def epilogueMapper(v: Value): Double = v
 }
@@ -115,7 +123,9 @@ case class Avg(private val keyIdx: Seq[Int], private val valIdx: Int)
   override type Value = (Double, Int)
   override implicit val valueClassTag: ClassTag[Value] = ClassTag(classOf[Value])
 
-  override def mapper(row: Key): (Key, Value) = (selectAttrs(row, keyIdx), (row.getInt(valIdx), 1))
-  override def reducer(v1: Value, v2: Value): Value = (v1._1 + v2._1, v1._2 + v2._2)
+  override def mapper(row: Key): (Key, Value) =
+    (selectAttrs(row, keyIdx), (row.getInt(valIdx), 1))
+  override def reducer(v1: Value, v2: Value): Value =
+    (v1._1 + v2._1, v1._2 + v2._2)
   override def epilogueMapper(v: Value): Double = v._1 / v._2
 }

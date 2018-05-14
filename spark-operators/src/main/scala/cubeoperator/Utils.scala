@@ -26,7 +26,7 @@ object Utils {
             // carry not added to this 'bit' (which was true), unset and continue with carry
             else (false +: soFar, b)
         }._1
-        mask.tail  // tail is what we are interested in
+        mask.tail // tail is what we are interested in
       }
     }
   }
