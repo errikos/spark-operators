@@ -18,7 +18,7 @@ class CubeOperator(reducers: Int) {
     */
 
   /**
-    *
+    * MRDataCube operator.
     */
   def cube(dataset: Dataset,
            groupingAttributes: List[String],
@@ -39,9 +39,10 @@ class CubeOperator(reducers: Int) {
     import aggregator._
 
     // execute phase 1
-    val bottomCell = rdd
-      .map(aggregator.mapper)
-      .reduceByKey(aggregator.reducer)
+    val phaseOneResult = rdd
+      .map(aggregator.mapper)                // map each input row to an RDD row
+      .reduceByKey(aggregator.reducer)       // combine locally, shuffle and reduce
+      .flatMap(aggregator.partialGenerator)  // generate partial upper cells
 
     // execute phase 2
 
@@ -49,7 +50,7 @@ class CubeOperator(reducers: Int) {
   }
 
   /**
-    *
+    * Naive cube operator.
     */
   def cube_naive(dataset: Dataset,
                  groupingAttributes: List[String],
