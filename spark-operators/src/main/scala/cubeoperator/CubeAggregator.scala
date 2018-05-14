@@ -34,7 +34,7 @@ sealed abstract class CubeAggregator(val name: String) extends Product with Seri
       yield
         (attrs.toSeq
            .zip(mask)
-           .map { case (a, b) => if (b) a else '*' }
+           .map { case (a, b) => if (b) a else "ALL" }
            .mkString(";"),
          row._2)
   }
@@ -53,8 +53,8 @@ sealed abstract class CubeAggregator(val name: String) extends Product with Seri
 }
 
 /**
-  * Aggregator companion object for Aggregator class above.
-  * Apply in order to get the appropriate Aggregator object.
+  * Aggregator companion object for the CubeAggregator class above.
+  * Apply in order to get the appropriate CubeAggregator object.
   */
 object CubeAggregator {
   def apply(agg: String, keyIdx: Seq[Int], valIdx: Int): CubeAggregator =
