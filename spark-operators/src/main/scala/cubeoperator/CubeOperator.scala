@@ -35,18 +35,22 @@ class CubeOperator(reducers: Int) {
     val aggregator = CubeAggregator(agg, indexAtt, indexAgg)
 
     // import implicit ClassTags for Key and Value
-    // required by the PairRDDFunctions constructor
+    // required by the PairRDDFunctions constructor, called by reduceByKey
     import aggregator._
 
     // execute phase 1
     val phaseOneResult = rdd
-      .map(aggregator.mapper)                // map each input row to an RDD row
-      .reduceByKey(aggregator.reducer)       // combine locally, shuffle and reduce
-      .flatMap(aggregator.partialGenerator)  // generate partial upper cells
+        .map(aggregator.mapper)                // map each input row to an RDD row
+        .reduceByKey(aggregator.reducer)       // combine locally, shuffle and reduce
+        .flatMap(aggregator.partialGenerator)  // generate partial upper cells
 
-    // execute phase 2 and return
+    // execute phase 2
+    val phaseTwoResult = phaseOneResult
+        .map(identity)                    // map just returns the <key, value> pair
+        .reduceByKey(aggregator.reducer)  // reducer is the same as in the first phase
 
-    ???
+    // apply epilogue mapper and return result
+    phaseTwoResult.map(aggregator.epilogueMapper)
   }
 
   /**
