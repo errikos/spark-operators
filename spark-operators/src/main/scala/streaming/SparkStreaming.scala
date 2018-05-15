@@ -5,17 +5,10 @@ import org.apache.spark.streaming._
 
 class SparkStreaming(val sparkConf: SparkConf, val args: Array[String]) {
 
-  // get the directory in which the stream is filled.
-  val inputDirectory = args(0)
-
-  // number of seconds per window
-  val seconds: Int = args(1).toInt
-
-  // K: number of heavy hitters stored
-  val topK: Int = args(2).toInt
-
-  // precise or approx
-  val strategy: String = args(3).toLowerCase
+  val inputDirectory = args(0) // the directory in which the stream is expected
+  val seconds: Int = args(1).toInt // seconds per window
+  val topK: Int = args(2).toInt // number of heavy hitters stored
+  val strategy: String = args(3).toLowerCase // "precise" or "approx"
 
   // create a StreamingContext, the main entry point for all streaming functionality
   val ssc = new StreamingContext(sparkConf, Seconds(seconds))
@@ -32,7 +25,7 @@ class SparkStreaming(val sparkConf: SparkConf, val args: Array[String]) {
     // get the appropriate streaming operator (calls StreamOperator.apply)
     val streamOperator = StreamOperator(strategy, words)
     // setup the streaming operations
-    streamOperator.setup()
+    streamOperator.setup(this)
 
     // start the computation
     ssc.start()

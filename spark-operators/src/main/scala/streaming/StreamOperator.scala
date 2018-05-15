@@ -3,7 +3,7 @@ package streaming
 import org.apache.spark.streaming.dstream.DStream
 
 sealed abstract class StreamOperator extends Product with Serializable {
-  def setup()
+  def setup(ctx: SparkStreaming)
 }
 
 object StreamOperator {
@@ -16,9 +16,9 @@ object StreamOperator {
 }
 
 case class PreciseStreamOperator(stream: DStream[(String, String)]) extends StreamOperator {
-  override def setup(): Unit = ???
+  override def setup(ctx: SparkStreaming): Unit = ???
 }
 
 case class ApproximateStreamOperator(stream: DStream[(String, String)]) extends StreamOperator {
-  override def setup(): Unit = ???
+  override def setup(ctx: SparkStreaming): Unit = ???
 }
