@@ -1,10 +1,7 @@
 package streaming
 
 import org.apache.spark.SparkConf
-import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-
-import scala.reflect.ClassTag
 
 /**
   * Base class for Streaming operators.
@@ -69,7 +66,7 @@ object PreciseStreamOperator extends StreamOperator {
       val top = rdd
         .map { _.swap }
         .top(env.topK)
-      println(s"This batch: [${top.mkString(",")}]")
+      println(s"Global: [${top.mkString(",")}]")
     }
 
     // set checkpoint path and return

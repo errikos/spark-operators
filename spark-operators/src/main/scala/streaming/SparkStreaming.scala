@@ -4,7 +4,7 @@ import org.apache.spark._
 import org.apache.spark.streaming._
 
 class Env(args: Array[String]) extends Serializable {
-  val checkpointPath = "hdfs://" // TODO
+  val checkpointPath = "/tmp/task3_checkpoint" // TODO
   val inputDirectory = args(0) // the directory in which the stream is expected
   val seconds: Int = args(1).toInt // seconds per window
   val topK: Int = args(2).toInt // track the k first hitters; only relevant for "precise" strategy
@@ -21,7 +21,7 @@ object Env {
   *
   * Streaming operation is triggered with a call to consume().
   */
-class SparkStreaming(val sparkConf: SparkConf, val args: Array[String]) {
+class SparkStreaming(val sparkConf: SparkConf, val args: Array[String]) extends Serializable {
 
   val env = Env(args)
 
