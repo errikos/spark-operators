@@ -1,7 +1,10 @@
 package streaming
 
 import org.apache.spark.SparkConf
+import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.{Seconds, StreamingContext}
+
+import scala.reflect.ClassTag
 
 /**
   * Base class for Streaming operators.
@@ -31,6 +34,17 @@ object StreamOperator {
 }
 
 object PreciseStreamOperator extends StreamOperator {
+  private def printTopK[K, V](msg: String, stream: DStream[(K, V)], k: Int)(
+      implicit kt: ClassTag[K],
+      vt: ClassTag[V],
+      ord: Ordering[(V, K)]): Unit = {
+    stream.foreachRDD { rdd =>
+      val top = rdd
+        .map { _.swap }
+        .top(k)
+      println(s"$msg: [${top.mkString(",")}]")
+    }
+  }
 
   def stateUpdater(vs: Seq[Int], running: Option[Int]): Option[Int] =
     Some(running.getOrElse(0) + vs.sum)
@@ -50,24 +64,14 @@ object PreciseStreamOperator extends StreamOperator {
       .map { (_, 1) }
       .reduceByKey { _ + _ }
     // find and print the top K hitters for this batch
-    thisBatchHits.foreachRDD { rdd =>
-      val top = rdd
-        .map { _.swap }
-        .top(env.topK)
-      println(s"This batch: [${top.mkString(",")}]")
-    }
+    printTopK("This batch", thisBatchHits, env.topK)
 
     // compute the IP pair hits globally
     val globalHits = thisBatchHits
       .updateStateByKey(stateUpdater)
       .checkpoint(Seconds(env.seconds << 3))
     // find and print the top K global hitters
-    globalHits.foreachRDD { rdd =>
-      val top = rdd
-        .map { _.swap }
-        .top(env.topK)
-      println(s"Global: [${top.mkString(",")}]")
-    }
+    printTopK("Global", globalHits, env.topK)
 
     // set checkpoint path and return
     ssc.checkpoint(env.checkpointPath)
