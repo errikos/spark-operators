@@ -38,6 +38,9 @@ object StreamOperator {
         // compute min-count sketch depth and width
         val width = math.ceil(2 / eps).toInt
         val depth = math.ceil(-math.log(1 - d) / math.log(2)).toInt
+        // the width and depth are calculated from relative error and confidence as in the Java
+        // implementation; see:
+        // spark.apache.org/docs/2.1.0/api/java/org/apache/spark/util/sketch/CountMinSketch.html
         println(s"Configuring with width=$width, depth=$depth")
         MinCountSketchOperator(depth, width, env)
       case other => throw UnknownStrategyException(s"Unknown strategy: $other")
