@@ -151,6 +151,8 @@ case class MinCountSketchOperator(depth: Int, width: Int, env: Env) extends Stre
     * "local" state of each cell by reducing by key and summing. From this we can extract
     * the estimation for the observed IP pair for this batch.
     *
+    * Once this is done, we can update the saved states by key (=IP pairs)
+    * and print the estimation based on the global states.
     */
   override def setup(conf: SparkConf, env: Env): StreamingContext = {
     // create a new streaming context object
@@ -188,65 +190,3 @@ case class MinCountSketchOperator(depth: Int, width: Int, env: Env) extends Stre
   }
 
 }
-
-//object ApproximateStreamOperator extends StreamOperator {
-//
-//  private def printObservation(msg: String, ips: (String, String), sketch: CountMinSketch): Unit =
-//    println(s"$msg: [${(sketch.estimate(ips), ips).toString}]")
-//
-//  private def stateUpdater(vs: Seq[CountMinSketch],
-//                           running: Option[CountMinSketch]): Option[CountMinSketch] = {
-//    Some(running.map { vs.head.mergeInPlace }.getOrElse(vs.head))
-//  }
-//
-//  override def setup(conf: SparkConf, env: Env): StreamingContext = {
-//    // create the local (batch) sketch object
-//    val localSketch = CountMinSketch(
-//      env.eps.getOrElse(throw MissingArgumentException("eps (relative error)")),
-//      env.confidence.getOrElse(throw MissingArgumentException("d (confidence)")))
-//    val observedPair = env.observedPair.getOrElse(throw MissingArgumentException("pair"))
-//
-//    // create a new streaming context object
-//    val ssc = new StreamingContext(conf, Seconds(env.seconds))
-//    // create a DStream that represents streaming data from a directory source.
-//    val linesDStream = ssc.textFileStream(env.inputDirectory)
-//    // parse the stream and map each line to an IP pair
-//    val thisBatchIPs = linesDStream.map { x =>
-//      (x.split("\t")(0), x.split("\t")(1))
-//    }
-//
-//    // compute the IP pair hits for the current batch
-//    val thisBatchHits = thisBatchIPs
-//      .map { (_, 1) }
-//      .reduceByKey { _ + _ }
-//
-//    // count the batch pairs to the local sketch
-//    thisBatchHits.foreachRDD { rdd =>
-//      rdd.foreach {
-//        case (key, value) =>
-//          localSketch.update(key, value)
-//      }
-//    }
-//    printObservation("This batch", observedPair, localSketch)
-//
-//    // count the IP pairs to the global sketch; we need to maintain only one state
-//    // to do this, we first map all rows of the current RDD to the same key ("COUNT_MIN_SKETCH")
-//    // and then we update the state.
-//    val globalHits = thisBatchHits
-//      .reduce { (t1, _) =>
-//        t1
-//      }
-//      .map { _ =>
-//        ("COUNT_MIN_SKETCH", localSketch)
-//      }
-//      .updateStateByKey(stateUpdater)
-//      .checkpoint(Seconds(env.seconds << 3))
-//    globalHits.foreachRDD { rdd =>
-//      printObservation("Global", observedPair, rdd.take(1)(0)._2)
-//    }
-//
-//    // set checkpoint path and return
-//    ssc.checkpoint(env.checkpointPath)
-//    ssc
-//  }
-//}
