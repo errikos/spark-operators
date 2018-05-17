@@ -12,11 +12,11 @@ class CountMinSketch(val depth: Int, val width: Int) extends Serializable {
     * applied seeded with the respective seed. Models the pairwise independent hash functions.
     * `uSeed` is used for the initial Murmur3 algorithm seeding.
     */
-  private val seeds = (0 until depth).map { Random.nextInt }
+  private val seeds = (0 until depth).map { _ => Random.nextInt }
   private val uSeed = stringHash("CS422-P2-T3")
 
   // the sketch (width x depth) array
-  private val sketch = seeds.map { _ =>
+  private var sketch = seeds.map { _ =>
     mutable.ArraySeq.fill(width)(0)
   }
 
@@ -46,6 +46,13 @@ class CountMinSketch(val depth: Int, val width: Int) extends Serializable {
         val col = math.abs(finalizeHash(mixLast(mix(uSeed, s), item.##), 0)) % width
         sketch(idx)(col)
     }.min
+
+  def mergeInPlace(other: CountMinSketch): CountMinSketch = {
+    sketch = sketch.zip(other.sketch).map { case (r1, r2) =>
+      r1.zipWithIndex.map { case (x, idx) => x + r2(idx) }
+    }
+    this
+  }
 
   def printSketch(): Unit = {
     sketch.foreach { println }

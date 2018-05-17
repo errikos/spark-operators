@@ -4,11 +4,18 @@ import org.apache.spark._
 import org.apache.spark.streaming._
 
 class Env(args: Array[String]) extends Serializable {
-  val checkpointPath = "/tmp/task3_checkpoint" // TODO
+  val checkpointPath = "/tmp/task3_checkpoint" // the checkpoint base path
   val inputDirectory = args(0) // the directory in which the stream is expected
   val seconds: Int = args(1).toInt // seconds per window
   val topK: Int = args(2).toInt // track the k first hitters; only relevant for "precise" strategy
   val strategy: String = args(3).toLowerCase // "precise" or "approx"
+
+  // arguments relative to "approx" strategy only
+  val eps: Option[Double] = args.lift(4).map { _.toDouble }
+  val confidence: Option[Double] = args.lift(5).map { _.toDouble }
+  val observedPair: Option[(String, String)] = args.lift(6).map { p =>
+    (p.split(",")(0), p.split(",")(1))
+  }
 }
 
 object Env {
@@ -28,7 +35,7 @@ class SparkStreaming(val sparkConf: SparkConf, val args: Array[String]) extends 
   // create a StreamingContext, the main entry point for all streaming functionality
   private def createContext: StreamingContext = {
     // get the appropriate streaming operator (calls StreamOperator.apply)
-    val streamOperator = StreamOperator(env.strategy)
+    val streamOperator = StreamOperator(env)
     // setup the streaming operations and return the context
     streamOperator.setup(sparkConf, env)
   }
