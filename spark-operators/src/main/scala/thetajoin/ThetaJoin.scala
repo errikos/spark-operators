@@ -7,23 +7,24 @@ class ThetaJoin(numR: Long, numS: Long, reducers: Int, bucketSize: Int) extends 
   /** Sample the boundaries from an RDD.
     *
     * @param rdd the RDD to sample from
-    * @param idx the index of the join attribute
+    * @param num the size of the sample to take. Note that the number of elements returned
+    *            may be smaller than `num`, since any duplicates will be dropped.
     * @return a sorted [[Array]] with the sampled integers
     */
-  private def sample(rdd: RDD[Int], idx: Int): Array[Int] = {
+  private def sample(rdd: RDD[Int], num: Int): Array[Int] = {
     rdd
-      .sample(withReplacement = false, fraction = math.sqrt(reducers.toDouble / (numR * numS)))
-      .distinct(reducers)
-      .collect
-      .sorted // collect them as an Array and sort
+      // sample twice as requested elements, to reduce the probability
+      // that the distinct elements are fewer than requested
+      .takeSample(withReplacement = false, num = 2 * num)
+      .distinct // keep only distinct values from sample
+      .take(num) // now take as many as requested
+      .sorted // and sort
   }
 
   private def bucketCount(rdd: RDD[Int], bounds: Array[Int]): Array[Int] = {
     rdd
-      .map { v => // for each value, map a (bucket, 1) pair
-        (bounds.sliding(2).indexWhere {
-          case Array(i, j) => i <= v && v < j
-        }, 1)
+      .map { v => // for each value, map a (bucket#, 1) pair
+        (bounds.indexWhere { v <= _ }, 1)
       }
       .reduceByKey { _ + _ } // reduce by summing the counts per bucket
       .collect
@@ -48,8 +49,8 @@ class ThetaJoin(numR: Long, numS: Long, reducers: Int, bucketSize: Int) extends 
     val S = dataSet2.getRDD.map { _.getInt(attrS_idx) } // only keep the join attribute for S
 
     // (a) compute the approximate equi-depth histogram for R and S -------------------------------
-    val R_bounds = Int.MinValue +: sample(R, attrR_idx) :+ Int.MaxValue // get cr samples from R
-    val S_bounds = Int.MinValue +: sample(S, attrS_idx) :+ Int.MaxValue // get cs samples from S
+    val R_bounds = sample(R, math.sqrt((numS * reducers) / numR).round.toInt) // get samples from R
+    val S_bounds = sample(S, math.sqrt((numR * reducers) / numS).round.toInt) // get samples from S
     val R_counts = bucketCount(R, R_bounds) // get the bucket counts for R
     val S_counts = bucketCount(S, S_bounds) // get the bucket counts for S
 
