@@ -13,24 +13,35 @@ class ThetaJoin(numR: Long, numS: Long, reducers: Int, bucketSize: Int) extends 
     */
   private def sample(rdd: RDD[Int], num: Int): Array[Int] = {
     rdd
-      // sample twice as requested elements, to reduce the probability
-      // that the distinct elements are fewer than requested
+    // sample twice as requested elements, to reduce the probability
+    // that the distinct elements are fewer than requested
       .takeSample(withReplacement = false, num = 2 * num)
       .distinct // keep only distinct values from sample
       .take(num) // now take as many as requested
       .sorted // and sort
   }
 
-  private def bucketCount(rdd: RDD[Int], bounds: Array[Int]): Array[Int] = {
-    rdd
+  /** Given an RDD of Integers, counts the values per bucket.
+    * Bucket boundaries are determined by the `bounds` parameter.
+    *
+    * @param rdd the RDD containing the values to count
+    * @param bounds the bucket boundaries
+    * @return the counts per bucket as an [[Array]] whose position `i` represents bucket `i`
+    */
+  private def bucketCount(rdd: RDD[Int], bounds: Seq[Int]): IndexedSeq[Long] = {
+    val paired = rdd
       .map { v => // for each value, map a (bucket#, 1) pair
-        (bounds.indexWhere { v <= _ }, 1)
+        (bounds.sliding(2).indexWhere { case Seq(_, to) => v <= to }, 1l)
       }
       .reduceByKey { _ + _ } // reduce by summing the counts per bucket
       .collect
       .sortBy { _._1 } // sort by bucket
-      .unzip // split the (bucket, count) pairs to separate Arrays
-      ._2 // return the counts Array
+    for (i <- 1 until bounds.length) // for each bucket
+      yield // did it have any elements?
+        paired.indexWhere { case (bucket, _) => i - 1 == bucket } match {
+          case -1 => 0l // if not, insert a zero for its count
+          case ii => paired(ii)._2 // otherwise, insert the count found
+        }
   }
 
   /** Takes as input two data sets and the join condition.
@@ -51,15 +62,23 @@ class ThetaJoin(numR: Long, numS: Long, reducers: Int, bucketSize: Int) extends 
     // (a) compute the approximate equi-depth histogram for R and S -------------------------------
     val R_bounds = sample(R, math.sqrt((numS * reducers) / numR).round.toInt) // get samples from R
     val S_bounds = sample(S, math.sqrt((numR * reducers) / numS).round.toInt) // get samples from S
-    val R_counts = bucketCount(R, R_bounds) // get the bucket counts for R
-    val S_counts = bucketCount(S, S_bounds) // get the bucket counts for S
+    val R_boundsEncl = (R_bounds.toSet ++ Set(Int.MinValue, Int.MaxValue)).toSeq.sorted
+    val S_boundsEncl = (S_bounds.toSet ++ Set(Int.MinValue, Int.MaxValue)).toSeq.sorted
+    val R_counts = bucketCount(R, R_boundsEncl) // get the bucket counts for R
+    val S_counts = bucketCount(S, S_boundsEncl) // get the bucket counts for S
 
+    // some debug messages
     println(s"|R| = $numR, |S| = $numS")
     println(s"fraction: ${math.sqrt(reducers.toDouble / (numR * numS))}")
-    println(s"R bounds: ${R_bounds.mkString(",")}")
+    println(s"R bounds: ${R_boundsEncl.mkString(",")}")
     println(s"R counts: ${R_counts.mkString(",")} (=${R_counts.sum})")
-    println(s"S bounds: ${S_bounds.mkString(",")}")
+    println(s"S bounds: ${S_boundsEncl.mkString(",")}")
     println(s"S counts: ${S_counts.mkString(",")} (=${S_counts.sum})")
+
+    // (b) calculate the buckets to be assigned to the reducers (M-Bucket-I algorithm) ------------
+//    val opFun = ThetaJoin.getOp(op) // get the operator function
+    val mbi = MBucketInput(numR, R_bounds, R_counts, numS, S_bounds, S_counts, bucketSize, op)
+//    val assign = mbi.coverMatrix // create an M-Bucket-I object and calculate the assignment
 
     ???
   }
@@ -70,18 +89,14 @@ class ThetaJoin(numR: Long, numS: Long, reducers: Int, bucketSize: Int) extends 
     */
   private def |><|(dat1: Iterator[(Int, Int)],
                    dat2: Iterator[(Int, Int)],
-                   op: String): Iterator[(Int, Int)] = {
-    var res = List.empty[(Int, Int)]
-    val dat2List = dat2.toList
+                   op: (Int, Int) => Boolean): Iterator[(Int, Int)] = {
+    val res = scala.collection.mutable.MutableList.empty[(Int, Int)]
+    val dat2List = dat2.toSeq
 
-    while (dat1.hasNext) {
-      val row1 = dat1.next
-      for (row2 <- dat2List) {
-        if (ThetaJoin.checkCondition(row1._2, row2._2, op)) {
-          res = res :+ (row1._2, row2._2)
-        }
-      }
-    }
+    for (row1 <- dat1)
+      for (row2 <- dat2List)
+        if (op(row1._2, row2._2))
+          res += ((row1._2, row2._2))
     res.iterator
   }
 }
@@ -89,6 +104,15 @@ class ThetaJoin(numR: Long, numS: Long, reducers: Int, bucketSize: Int) extends 
 object ThetaJoin {
   def apply(numR: Long, numS: Long, reducers: Int, bucketSize: Int): ThetaJoin =
     new ThetaJoin(numR, numS, reducers, bucketSize)
+
+  def getOp(op: String): (Int, Int) => Boolean = op match {
+    case "<"  => _ < _
+    case ">"  => _ > _
+    case "="  => _ == _
+    case "<=" => _ <= _
+    case ">=" => _ >= _
+    case "!=" => _ != _
+  }
 
   def checkCondition(value1: Int, value2: Int, op: String): Boolean = {
     op match {
