@@ -10,6 +10,15 @@ package thetajoin
   */
 case class Bucket(hStart: Long, hEnd: Long, vStart: Long, vEnd: Long, numCandidates: Int) {
   val area: Long = math.abs(hEnd - hStart) * math.abs(vEnd - vStart)
+
+  private def intersectsWithRow(rowId: Long): Boolean = hStart <= rowId && rowId < hEnd
+  private def intersectsWithColumn(colId: Long): Boolean = vStart <= colId && colId < vEnd
+
+  def intersectsWith(idx: Long, axis: Int): Boolean = axis match {
+    case 0 => intersectsWithRow(idx)
+    case 1 => intersectsWithColumn(idx)
+    case _ => throw new IllegalArgumentException(s"Bucket: unsupported axis: $axis")
+  }
 }
 
 /** Case class modelling a histogram region.
@@ -34,7 +43,7 @@ case class Region(hStart: Long, hEnd: Long, vStart: Long, vEnd: Long, isCandidat
     */
   def estimateCandidates(h1: Long, h2: Long, v1: Long, v2: Long): Int = {
     if (h2 <= hStart || hEnd <= h1 || v2 <= vStart || vEnd <= v1)
-      0 // if there is not intersection, then #candidates is zero
+      0 // if there is no intersection, then #candidates is zero
     else {
       val ih1 = math.max(h1, hStart)
       val ih2 = math.min(h2, hEnd)
@@ -94,7 +103,7 @@ class MBucketInput(val rows: Long, // the number of rows
     * Each object contains the row/column offsets of the region and whether it can
     * contain candidate elements for the join predicate.
     */
-  val candidateRegions = {
+  private val candidateRegions = {
     hBounds // take the horizontal bounds
       .zip(hBoundsAcc) // along with the horizontal cumulative bounds
       .sliding(2) // start a sliding window of size 2 in horizontal regions
@@ -139,7 +148,7 @@ class MBucketInput(val rows: Long, // the number of rows
   def coverRows(rowFrom: Long, rowTo: Long): Seq[Bucket] = {
     val dx = math.abs(rowTo - rowFrom) // number of rows we are considering
     val dyMax = maxInput / dx // maximum number of columns we can take
-    ((Seq.empty[Bucket], 0l) /: (0l to columns)) {
+    ((Seq.empty[Bucket], 0l) /: (1l to columns)) {
       // fold the matrix columns, with column 0 as the start and with an empty sequence of buckets
       case ((soFar, start), col) if math.abs(col - start) == dyMax || col == columns =>
         // if we reach the maximum number of columns or if we exhaust all columns
@@ -156,11 +165,12 @@ class MBucketInput(val rows: Long, // the number of rows
     * Maps to Algorithm 4 from the paper.
     */
   def coverSubMatrix(startRow: Long): (Seq[Bucket], Long) = {
-    var maxScore = ((Seq.empty[Bucket], startRow), Double.MinValue)
-    (startRow + 1 to math.min(rows, startRow + maxInput)).foreach { endRow =>
+    val iMax = math.min(maxInput, rows - startRow)
+    var maxScore = ((Seq.empty[Bucket], startRow + iMax), 0.0)
+    for (i <- 1l to iMax if maxInput % i == 0) {
       // for each possible row block starting from startRow
-      val cover = coverRows(startRow, endRow) // find cover with width (endRow - startRow + 1)
-      val score = ((cover, endRow), cover.map(_.numCandidates).sum.toDouble / cover.length)
+      val cover = coverRows(startRow, startRow + i) // find cover with width (endRow - startRow + 1)
+      val score = ((cover, startRow + i), cover.map(_.numCandidates).sum.toDouble / cover.length)
       maxScore = if (score._2 > maxScore._2) score else maxScore // keep track of max score
     }
     maxScore._1 // return cover with max score
@@ -173,6 +183,7 @@ class MBucketInput(val rows: Long, // the number of rows
     var row = 0l // start from row 0
     var matrixCover = Seq.empty[Bucket] // with an empty cover
     while (row < rows) { // while there are uncovered rows
+      println(s"row: $row")
       // start from row and find a good enough cover using our heuristics
       val (rowCover, nextRow) = coverSubMatrix(row)
       matrixCover ++= rowCover // update result with the found cover

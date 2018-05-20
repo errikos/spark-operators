@@ -38,10 +38,37 @@ class ThetaJoin(numR: Long, numS: Long, reducers: Int, bucketSize: Int) extends 
       .sortBy { _._1 } // sort by bucket
     for (i <- 1 until bounds.length) // for each bucket
       yield // did it have any elements?
-        paired.indexWhere { case (bucket, _) => i - 1 == bucket } match {
-          case -1 => 0l // if not, insert a zero for its count
-          case ii => paired(ii)._2 // otherwise, insert the count found
-        }
+      paired.indexWhere { case (bucket, _) => i - 1 == bucket } match {
+        case -1 => 0l // if not, insert a zero for its count
+        case ii => paired(ii)._2 // otherwise, insert the count found
+      }
+  }
+
+  /** For a given RDD, bucket list and axis, returns a new RDD, which has a bucket ID
+    * (i.e. reducer ID) set as the key and a (row value, axis) pair as value.
+    *
+    * Warning: This method calls [[RDD.sortBy]] on the input RDD.
+    *
+    * @param rdd the RDD whose rows to assign to buckets
+    * @param buckets the bucket list, containing instances of [[Bucket]]
+    * @param axis the intersection axis: 0 for horizontal, 1 for vertical
+    * @return a new RDD with the corresponding bucket ID as the key in each row
+    */
+  def assignBuckets(rdd: RDD[Int], buckets: Seq[Bucket], axis: Int): RDD[(Int, (Int, Int))] = {
+    rdd
+      .sortBy(v => v, numPartitions = reducers) // sort the given RDD
+      .zipWithIndex // take each row with its row ID
+      .flatMap {
+        case (v, idx) => // for each (value, rowId) pair
+          // calculate the buckets it intersects with in the given axis
+          (Seq.empty[(Int, (Int, Int))] /: buckets.zipWithIndex) {
+            case (soFar, (bucket, bucket_idx)) =>
+              if (bucket.intersectsWith(idx, axis = axis))
+                soFar :+ (bucket_idx, (v, axis))
+              else
+                soFar
+          }
+      }
   }
 
   /** Takes as input two data sets and the join condition.
@@ -62,6 +89,7 @@ class ThetaJoin(numR: Long, numS: Long, reducers: Int, bucketSize: Int) extends 
     // (a) compute the approximate equi-depth histogram for R and S -------------------------------
     val R_bounds = sample(R, math.sqrt((numS * reducers) / numR).round.toInt) // get samples from R
     val S_bounds = sample(S, math.sqrt((numR * reducers) / numS).round.toInt) // get samples from S
+    // enclose the bounds with Int.MinValue and Int.MaxValue to "complete" the intervals
     val R_boundsEncl = (R_bounds.toSet ++ Set(Int.MinValue, Int.MaxValue)).toSeq.sorted
     val S_boundsEncl = (S_bounds.toSet ++ Set(Int.MinValue, Int.MaxValue)).toSeq.sorted
     val R_counts = bucketCount(R, R_boundsEncl) // get the bucket counts for R
@@ -76,28 +104,67 @@ class ThetaJoin(numR: Long, numS: Long, reducers: Int, bucketSize: Int) extends 
     println(s"S counts: ${S_counts.mkString(",")} (=${S_counts.sum})")
 
     // (b) calculate the buckets to be assigned to the reducers (M-Bucket-I algorithm) ------------
-//    val opFun = ThetaJoin.getOp(op) // get the operator function
-    val mbi = MBucketInput(numR, R_bounds, R_counts, numS, S_bounds, S_counts, bucketSize, op)
-//    val assign = mbi.coverMatrix // create an M-Bucket-I object and calculate the assignment
+    val mbi = MBucketInput(numR, R_boundsEncl, R_counts, numS, S_boundsEncl, S_counts, bucketSize, op)
+    val buckets = mbi.coverMatrix // create an M-Bucket-I object and calculate the buckets
 
-    ???
+    println("Assigning values to buckets...")
+
+    // (c) assign the values of each data set (R, S) to the corresponding bucket ------------------
+    val R_assigned = assignBuckets(R, buckets, axis = 0)
+    val S_assigned = assignBuckets(S, buckets, axis = 1)
+
+    println("Grouping and performing join...")
+
+    (R_assigned union S_assigned)
+      // (d) partition the data sets using as key the corresponding bucket number -----------------
+      .groupByKey(reducers)
+      // (e) perform the theta-join operation locally in each partition ---------------------------
+      .flatMapValues { tuples =>
+        val split = splitTuples(tuples)
+        |><|(split._1, split._2, ThetaJoin.getOp(op))
+      }.values
   }
 
-  /** this method takes as input two lists of values that belong to the same partition
-    * and performs the theta join on them. Both data sets are lists of tuples (Int, Int)
-    * where ._1 is the partition number and ._2 is the value.
-    */
-  private def |><|(dat1: Iterator[(Int, Int)],
-                   dat2: Iterator[(Int, Int)],
-                   op: (Int, Int) => Boolean): Iterator[(Int, Int)] = {
-    val res = scala.collection.mutable.MutableList.empty[(Int, Int)]
-    val dat2List = dat2.toSeq
+//    R_assigned
+//      .map { case (key, value) => (key, Seq(value)) }
+//      .union(S_assigned.map { case (key, value) => (key, Seq(value)) })
+      // (d) partition the data sets using as key the corresponding bucket number -----------------
+//      .reduceByKey(_ ++ _, numPartitions = reducers)
+      // (e) perform the theta-join operation locally in each partition ---------------------------
+//      .flatMapValues { thisBucketTuples =>
+//        val split = splitTuples(thisBucketTuples)
+//        |><|(split._1, split._2, ThetaJoin.getOp(op))
+//      }
+//      .values
 
-    for (row1 <- dat1)
-      for (row2 <- dat2List)
-        if (op(row1._2, row2._2))
-          res += ((row1._2, row2._2))
-    res.iterator
+  /** Given an iterable of (value, relationId) tuples, returns a Tuple2 of iterables
+    * where the first iterable contains the values of relation #1 and the second iterable
+    * contains the values of relation #2.
+    */
+  private def splitTuples(tuples: Iterable[(Int, Int)]): (Iterable[Int], Iterable[Int]) = {
+    ((Seq.empty[Int], Seq.empty[Int]) /: tuples) {
+      case (soFar, (v, 0)) => (soFar._1 :+ v, soFar._2)
+      case (soFar, (v, 1)) => (soFar._1, soFar._2 :+ v)
+    }
+  }
+
+  /** Performs a simple nested-loop join on the values of `dat1` and `dat2`,
+    * using `op` as the join predicate.
+    *
+    * @param dat1 the first data set
+    * @param dat2 the second data set
+    * @param op the join predicate
+    * @return a list containing the resulting pairs from the join
+    */
+  private def |><|(dat1: Iterable[Int],
+                   dat2: Iterable[Int],
+                   op: (Int, Int) => Boolean): TraversableOnce[(Int, Int)] = {
+    val res = scala.collection.mutable.MutableList.empty[(Int, Int)]
+    for (t1 <- dat1)
+      for (t2 <- dat2)
+        if (op(t1, t2))
+          res += ((t1, t2))
+    res
   }
 }
 
@@ -112,15 +179,5 @@ object ThetaJoin {
     case "<=" => _ <= _
     case ">=" => _ >= _
     case "!=" => _ != _
-  }
-
-  def checkCondition(value1: Int, value2: Int, op: String): Boolean = {
-    op match {
-      case "="  => value1 == value2
-      case "<"  => value1 < value2
-      case "<=" => value1 <= value2
-      case ">"  => value1 > value2
-      case ">=" => value1 >= value2
-    }
   }
 }

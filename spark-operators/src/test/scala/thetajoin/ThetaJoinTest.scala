@@ -11,19 +11,20 @@ import org.apache.spark.sql.SparkSession
 
 class ThetaJoinTest extends FlatSpec {
   private val ctx = SparkSession.builder
-    .master("local[16]")
+    .master("local[*]")
     .appName("CS422-Project2")
     .getOrCreate()
   private val sqlContext = ctx.sqlContext
 
   test()
+//  assert(1 === 1)
 
   def test() {
-    val reducers = 10
+    val reducers = 16
     val maxInput = 1000
 
-    val inputFile1 = "input1_1K.csv"
-    val inputFile2 = "input2_1K.csv"
+    val inputFile1 = "/input1_2K.csv"
+    val inputFile2 = "/input2_2K.csv"
 
     val input1 = new File(getClass.getResource(inputFile1).getFile).getPath
     val input2 = new File(getClass.getResource(inputFile2).getFile).getPath
@@ -58,7 +59,8 @@ class ThetaJoinTest extends FlatSpec {
                            dataset2.getRDD.count,
                            reducers,
                            maxInput)
-    val res = tj.theta_join(dataset1, dataset2, "num", "num", "<")
+    val op = ">"
+    val res = tj.theta_join(dataset1, dataset2, "num", "num", op)
 
     val resultSize = res.count
     val t2 = System.nanoTime
@@ -68,12 +70,14 @@ class ThetaJoinTest extends FlatSpec {
     val index1 = schema1.indexOf("num")
     val index2 = schema2.indexOf("num")
 
+    val f = getOp(op)
+
     val cartRes = rdd1
       .cartesian(rdd2)
       .flatMap(x => {
         val v1 = x._1(index1).asInstanceOf[Int]
         val v2 = x._2(index2).asInstanceOf[Int]
-        if (v1 < v2)
+        if (f(v1, v2))
           List((v1, v2))
         else
           List()
@@ -82,5 +86,14 @@ class ThetaJoinTest extends FlatSpec {
     val resultSizeCartesian = cartRes.count
 
     assert(resultSize === resultSizeCartesian)
+  }
+
+  def getOp(op: String): (Int, Int) => Boolean = op match {
+    case "<"  => _ < _
+    case ">"  => _ > _
+    case "="  => _ == _
+    case "<=" => _ <= _
+    case ">=" => _ >= _
+    case "!=" => _ != _
   }
 }
