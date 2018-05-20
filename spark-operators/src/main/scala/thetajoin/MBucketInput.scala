@@ -3,27 +3,46 @@ package thetajoin
 /** Case class modelling a reducer bucket.
   *
   * @param hStart horizontal start
-  * @param hEnd horizontal end
+  * @param hEnd horizontal end (non-inclusive)
   * @param vStart vertical start
-  * @param vEnd vertical end
+  * @param vEnd vertical end (non-inclusive)
   * @param numCandidates number of candidate cells in this bucket
   */
 case class Bucket(hStart: Long, hEnd: Long, vStart: Long, vEnd: Long, numCandidates: Int) {
-  val area: Long = (math.abs(hEnd - hStart) + 1) * (math.abs(vEnd - vStart) + 1)
+  val area: Long = math.abs(hEnd - hStart) * math.abs(vEnd - vStart)
 }
 
 /** Case class modelling a histogram region.
   *
   * @param hStart horizontal start
-  * @param hEnd horizontal end
+  * @param hEnd horizontal end (non-inclusive)
   * @param vStart vertical start
-  * @param vEnd vertical end
+  * @param vEnd vertical end (non-inclusive)
   * @param isCandidate whether the contents of this region are candidates for the theta-join
   */
 case class Region(hStart: Long, hEnd: Long, vStart: Long, vEnd: Long, isCandidate: Boolean) {
-  val area: Long = (math.abs(hEnd - hStart) + 1) * (math.abs(vEnd - vStart) + 1)
+  val area: Long = math.abs(hEnd - hStart) * math.abs(vEnd - vStart)
 
-  def estimateCandidates(h1: Long, h2: Long, v1: Long, v2: Long): Long = ???
+  /** Given the "coordinates" of a bucket, estimates the number of candidates within the
+    * intersection of the given bucket and this region.
+    *
+    * @param h1 horizontal start of the bucket
+    * @param h2 horizontal end of the bucket (non-inclusive)
+    * @param v1 vertical start of the bucket
+    * @param v2 vertical end of the bucket (non-inclusive)
+    * @return
+    */
+  def estimateCandidates(h1: Long, h2: Long, v1: Long, v2: Long): Int = {
+    if (h2 <= hStart || hEnd <= h1 || v2 <= vStart || vEnd <= v1)
+      0 // if there is not intersection, then #candidates is zero
+    else {
+      val ih1 = math.max(h1, hStart)
+      val ih2 = math.min(h2, hEnd)
+      val iv1 = math.max(v1, vStart)
+      val iv2 = math.min(v2, vEnd)
+      (math.abs(ih1 - ih2) * math.abs(iv1 - iv2)).toInt
+    }
+  }
 }
 
 /** Class implementing the M-Bucket-Input heuristic-based algorithm:
@@ -47,8 +66,8 @@ class MBucketInput(val rows: Long, // the number of rows
                    val op: String) // maximum bucket size
     extends Serializable {
 
-  // Computes the intersection of regions `r1` and `r2`. Regions are upper-bound inclusive.
-  private def regionIntersection(r1: (Int, Int), r2: (Int, Int)): Option[(Int, Int)] = {
+  // Computes the intersection of regions `r1` and `r2`.
+  private def intervalIntersection(r1: (Int, Int), r2: (Int, Int)): Option[(Int, Int)] = {
     val lower = math.max(r1._1, r2._1)
     val upper = math.min(r1._2, r2._2)
     if (lower < upper) Some(lower, upper) else Option.empty
@@ -56,16 +75,18 @@ class MBucketInput(val rows: Long, // the number of rows
 
   // Determines whether `op` can hold for any elements within regions `r1` and `r2`.
   private def evalOp(r1: (Int, Int), r2: (Int, Int)): Boolean = op match {
-    case "=" if regionIntersection(r1, r2).isEmpty => false
-    case "<" | "<=" if r1._1 >= r2._2              => false
-    case ">" | ">=" if r1._2 <= r2._1              => false
-    case _                                         => true
+    case "=" if intervalIntersection(r1, r2).isEmpty => false
+    case "<" | "<=" if r1._1 >= r2._2                => false
+    case ">" | ">=" if r1._2 <= r2._1                => false
+    case _                                           => true
   }
 
-  val hBoundsAcc = (Seq(0l) /: hCounts) {
+  // horizontal accumulated boundaries
+  private val hBoundsAcc = (Seq(0l) /: hCounts) {
     case (soFar, count) => soFar :+ count + soFar.last
   }
-  val vBoundsAcc = (Seq(0l) /: vCounts) {
+  // vertical accumulated boundaries
+  private val vBoundsAcc = (Seq(0l) /: vCounts) {
     case (soFar, count) => soFar :+ count + soFar.last
   }
 
@@ -95,9 +116,9 @@ class MBucketInput(val rows: Long, // the number of rows
   /** Computes the number of candidates within the bucket defined by the given coordinates.
     *
     * @param hStart the horizontal start of the bucket
-    * @param hEnd the horizontal end of the bucket
+    * @param hEnd the horizontal end of the bucket (non-inclusive)
     * @param vStart the vertical start of the bucket
-    * @param vEnd the vertical end of the bucket
+    * @param vEnd the vertical end of the bucket (non-inclusive)
     * @return the number of candidates of the bucket
     */
   private def numCandidates(hStart: Long, hEnd: Long, vStart: Long, vEnd: Long): Int =
@@ -105,28 +126,28 @@ class MBucketInput(val rows: Long, // the number of rows
       case (soFar, regionRow) => // for each region row
         regionRow.map { // for each region within the region row
           // if region is evaluated to false, then there are no candidates
-          case Region(_, _, _, _, false) => 0
+          case region if !region.isCandidate => 0
           // if region is evaluated to true, then we need to find its intersection with the bucket
-          case Region(h1, h2, v1, v2, true) =>
-            ???
+          case region if region.isCandidate =>
+            region.estimateCandidates(hStart, hEnd, vStart, vEnd)
         }.sum + soFar // sum the candidates in this region row and add to the 'soFar' counter
     }
 
   /** For a given range of rows, finds a cover with that width.
     * Maps to Algorithm 5 from the paper.
     */
-  private def coverRows(rowFrom: Long, rowTo: Long): Seq[Bucket] = {
-    val dx = math.abs(rowTo - rowFrom) + 1 // number of rows we are considering
+  def coverRows(rowFrom: Long, rowTo: Long): Seq[Bucket] = {
+    val dx = math.abs(rowTo - rowFrom) // number of rows we are considering
     val dyMax = maxInput / dx // maximum number of columns we can take
-    ((Seq.empty[Bucket], 0l) /: (0l until columns)) {
+    ((Seq.empty[Bucket], 0l) /: (0l to columns)) {
       // fold the matrix columns, with column 0 as the start and with an empty sequence of buckets
-      case ((soFar, start), col) if math.abs(col - start) + 1 == dyMax || columns - 1 == col =>
+      case ((soFar, start), col) if math.abs(col - start) == dyMax || col == columns =>
         // if we reach the maximum number of columns or if we exhaust all columns
         val candidates = numCandidates(rowFrom, rowTo, start, col) // compute the candidate count
         if (candidates > 0) // if bucket contains at least one candidate, take it
-          (soFar :+ Bucket(rowFrom, rowTo, start, col, candidates), col + 1)
+          (soFar :+ Bucket(rowFrom, rowTo, start, col, candidates), col)
         else // else, leave it
-          (soFar, col + 1)
+          (soFar, col)
       case ((soFar, start), _) => (soFar, start)
     }._1
   }
@@ -134,12 +155,12 @@ class MBucketInput(val rows: Long, // the number of rows
   /** For a given start row, tries to find the best cover consisting of width = 1, 2, ..., maxInput.
     * Maps to Algorithm 4 from the paper.
     */
-  private def coverSubMatrix(startRow: Long): (Seq[Bucket], Long) = {
-    var maxScore = ((Seq.empty[Bucket], startRow), Int.MinValue)
-    (startRow until math.min(rows, startRow + maxInput)).foreach { endRow =>
+  def coverSubMatrix(startRow: Long): (Seq[Bucket], Long) = {
+    var maxScore = ((Seq.empty[Bucket], startRow), Double.MinValue)
+    (startRow + 1 to math.min(rows, startRow + maxInput)).foreach { endRow =>
       // for each possible row block starting from startRow
       val cover = coverRows(startRow, endRow) // find cover with width (endRow - startRow + 1)
-      val score = ((cover, endRow + 1), cover.map(_.numCandidates).sum / cover.length)
+      val score = ((cover, endRow), cover.map(_.numCandidates).sum.toDouble / cover.length)
       maxScore = if (score._2 > maxScore._2) score else maxScore // keep track of max score
     }
     maxScore._1 // return cover with max score
