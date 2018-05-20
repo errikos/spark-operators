@@ -56,7 +56,7 @@ class ThetaJoin(numR: Long, numS: Long, reducers: Int, bucketSize: Int) extends 
     */
   def assignBuckets(rdd: RDD[Int], buckets: Seq[Bucket], axis: Int): RDD[(Int, (Int, Int))] = {
     rdd
-      .sortBy(v => v, numPartitions = reducers) // sort the given RDD
+      .sortBy(v => v) // sort the given RDD
       .zipWithIndex // take each row with its row ID
       .flatMap {
         case (v, idx) => // for each (value, rowId) pair
@@ -104,7 +104,8 @@ class ThetaJoin(numR: Long, numS: Long, reducers: Int, bucketSize: Int) extends 
     println(s"S counts: ${S_counts.mkString(",")} (=${S_counts.sum})")
 
     // (b) calculate the buckets to be assigned to the reducers (M-Bucket-I algorithm) ------------
-    val mbi = MBucketInput(numR, R_boundsEncl, R_counts, numS, S_boundsEncl, S_counts, bucketSize, op)
+    val mbi =
+      MBucketInput(numR, R_boundsEncl, R_counts, numS, S_boundsEncl, S_counts, bucketSize, op)
     val buckets = mbi.coverMatrix // create an M-Bucket-I object and calculate the buckets
 
     println("Assigning values to buckets...")
@@ -116,26 +117,15 @@ class ThetaJoin(numR: Long, numS: Long, reducers: Int, bucketSize: Int) extends 
     println("Grouping and performing join...")
 
     (R_assigned union S_assigned)
-      // (d) partition the data sets using as key the corresponding bucket number -----------------
+    // (d) partition the data sets using as key the corresponding bucket number -----------------
       .groupByKey(reducers)
       // (e) perform the theta-join operation locally in each partition ---------------------------
       .flatMapValues { tuples =>
         val split = splitTuples(tuples)
         |><|(split._1, split._2, ThetaJoin.getOp(op))
-      }.values
+      }
+      .values
   }
-
-//    R_assigned
-//      .map { case (key, value) => (key, Seq(value)) }
-//      .union(S_assigned.map { case (key, value) => (key, Seq(value)) })
-      // (d) partition the data sets using as key the corresponding bucket number -----------------
-//      .reduceByKey(_ ++ _, numPartitions = reducers)
-      // (e) perform the theta-join operation locally in each partition ---------------------------
-//      .flatMapValues { thisBucketTuples =>
-//        val split = splitTuples(thisBucketTuples)
-//        |><|(split._1, split._2, ThetaJoin.getOp(op))
-//      }
-//      .values
 
   /** Given an iterable of (value, relationId) tuples, returns a Tuple2 of iterables
     * where the first iterable contains the values of relation #1 and the second iterable

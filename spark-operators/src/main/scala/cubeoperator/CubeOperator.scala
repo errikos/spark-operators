@@ -4,21 +4,7 @@ import org.apache.spark.rdd._
 
 class CubeOperator(reducers: Int) {
 
-  /**
-    * This method gets as input one dataset, the grouping attributes of the cube (CUBE BY clause)
-    * the attribute on which the aggregation is performed
-    * and the aggregate function (it has to be one of "COUNT", "SUM", "MIN", "MAX", "AVG")
-    * and returns an RDD with the result in the form of < key: string, value: double > pairs.
-    * The key is used to uniquely identify a group that corresponds to a certain combination of
-    * attribute values.
-    * You are free to do that following your own naming convention.
-    * The value is the aggregation result.
-    * You are not allowed to change the definition of this function or the names of the aggregate
-    * functions.
-    */
-  /**
-    * MRDataCube operator.
-    */
+  // MRDataCube operator.
   def cube(dataSet: Dataset,
            groupingAttributes: List[String],
            aggAttribute: String,
@@ -40,20 +26,20 @@ class CubeOperator(reducers: Int) {
     // execute phase 1
     val phaseOneResult = rdd
       .map(aggregator.mapper) // map each input row to an RDD row
-      .reduceByKey(aggregator.reducer) // combine locally, shuffle and reduce
+      // combine locally, shuffle and reduce
+      .reduceByKey(aggregator.reducer, numPartitions = reducers)
       .flatMap(aggregator.partialGenerator) // generate partial upper cells
 
     // execute phase 2
     val phaseTwoResult = phaseOneResult
-      .reduceByKey(aggregator.reducer) // reducer is the same as in the first phase
+      // reducer is the same as in the first phase
+      .reduceByKey(aggregator.reducer, numPartitions = reducers)
 
     // apply epilogue mapper and return result
     phaseTwoResult.mapValues(aggregator.epilogueMapper)
   }
 
-  /**
-    * Naive cube operator.
-    */
+  // Naive cube operator.
   def cube_naive(dataSet: Dataset,
                  groupingAttributes: List[String],
                  aggAttribute: String,
@@ -74,7 +60,7 @@ class CubeOperator(reducers: Int) {
 
     rdd
       .flatMap(aggregator.mapper)
-      .reduceByKey(aggregator.reducer)
+      .reduceByKey(aggregator.reducer, numPartitions = reducers)
       .mapValues(aggregator.epilogueMapper)
   }
 

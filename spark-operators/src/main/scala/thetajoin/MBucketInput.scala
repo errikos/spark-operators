@@ -183,7 +183,6 @@ class MBucketInput(val rows: Long, // the number of rows
     var row = 0l // start from row 0
     var matrixCover = Seq.empty[Bucket] // with an empty cover
     while (row < rows) { // while there are uncovered rows
-      println(s"row: $row")
       // start from row and find a good enough cover using our heuristics
       val (rowCover, nextRow) = coverSubMatrix(row)
       matrixCover ++= rowCover // update result with the found cover
